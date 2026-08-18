@@ -3,6 +3,7 @@ import { ShieldCheck, Wrench, HeartHandshake } from "lucide-react";
 import { businessConfig } from "@/lib/config/business";
 import { WatchRibbon } from "@/components/WatchRibbon";
 import { HeroGraphic } from "@/components/HeroGraphic";
+import { WhyChooseUs } from "@/components/WhyChooseUs";
 
 export default function HomePage() {
   return (
@@ -92,6 +93,8 @@ export default function HomePage() {
           </Link>
         </div>
       </section>
+
+      <WhyChooseUs />
 
       <section className="mx-auto max-w-6xl px-6 py-16">
         <h2 className="font-display text-3xl font-semibold text-ink">
