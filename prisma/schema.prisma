@@ -1,0 +1,245 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CUSTOMER
+  TECHNICIAN
+  ADMIN
+}
+
+enum SubscriptionStatus {
+  PENDING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  PAUSED
+}
+
+enum DeviceStatus {
+  GREEN
+  YELLOW
+  RED
+  UNKNOWN
+}
+
+enum TicketStatus {
+  NEW
+  OPEN
+  WAITING_ON_CUSTOMER
+  SCHEDULED
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum LeadIntent {
+  REPAIR_CUSTOMER
+  SENIOR_SAFE_PROSPECT
+  FAMILY_MEMBER_FOR_SENIOR
+  EXISTING_CUSTOMER_SUPPORT
+  GENERAL_QUESTION
+  BUSINESS_IT_PROSPECT
+  UNKNOWN
+}
+
+model Household {
+  id                   String    @id @default(cuid())
+  address              String?
+  phone                String?
+  email                String?
+  planId               String?
+  plan                 Plan?     @relation(fields: [planId], references: [id])
+  subscriptionStatus   SubscriptionStatus @default(PENDING)
+  squareCustomerId     String?
+  squareSubscriptionId String?
+  createdAt            DateTime  @default(now())
+
+  users            User[]
+  devices          Device[]
+  subscriptions    Subscription[]
+  supportTickets   SupportTicket[]
+  notes            Note[]
+  onboardingSteps  OnboardingStep[]
+  conversations    Conversation[]
+}
+
+model User {
+  id           String    @id @default(cuid())
+  householdId  String?
+  household    Household? @relation(fields: [householdId], references: [id])
+  name         String
+  email        String    @unique
+  phone        String?
+  passwordHash String
+  role         UserRole  @default(CUSTOMER)
+  createdAt    DateTime  @default(now())
+
+  notesAuthored    Note[]           @relation("NoteAuthor")
+  supportMessages  SupportMessage[]
+  auditLogs        AuditLog[]
+}
+
+model Device {
+  id               String       @id @default(cuid())
+  householdId      String
+  household        Household    @relation(fields: [householdId], references: [id])
+  name             String
+  manufacturer     String?
+  model            String?
+  serialNumber     String?
+  os               String?
+  osVersion        String?
+  ramGb            Int?
+  storageGb        Int?
+  securityStatus   String?
+  encryptionStatus String?
+  rmmExternalId    String?
+  lastCheckIn      DateTime?
+  lastHealthCheck  DateTime?
+  status           DeviceStatus @default(UNKNOWN)
+  createdAt        DateTime     @default(now())
+
+  supportTickets SupportTicket[]
+}
+
+model Plan {
+  id               String   @id @default(cuid())
+  name             String
+  priceCents       Int
+  description      String
+  features         Json
+  squareVariationId String?
+  isActive         Boolean  @default(true)
+  sortOrder        Int      @default(0)
+
+  households    Household[]
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  householdId          String
+  household            Household          @relation(fields: [householdId], references: [id])
+  planId               String
+  plan                 Plan               @relation(fields: [planId], references: [id])
+  squareSubscriptionId String             @unique
+  status               SubscriptionStatus @default(PENDING)
+  currentPeriodEnd     DateTime?
+  createdAt            DateTime           @default(now())
+  canceledAt           DateTime?
+}
+
+model Lead {
+  id                    String     @id @default(cuid())
+  name                  String?
+  email                 String?
+  phone                 String?
+  buyingFor             String?
+  intentClassification  LeadIntent @default(UNKNOWN)
+  source                String?
+  convertedHouseholdId  String?
+  createdAt             DateTime   @default(now())
+
+  conversations Conversation[]
+}
+
+model Conversation {
+  id          String    @id @default(cuid())
+  householdId String?
+  household   Household? @relation(fields: [householdId], references: [id])
+  leadId      String?
+  lead        Lead?      @relation(fields: [leadId], references: [id])
+  channel     String     @default("website")
+  startedAt   DateTime   @default(now())
+  endedAt     DateTime?
+
+  messages ConversationMessage[]
+}
+
+model ConversationMessage {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  role           String       // "user" | "assistant"
+  content        String
+  createdAt      DateTime     @default(now())
+}
+
+model SupportTicket {
+  id          String         @id @default(cuid())
+  householdId String
+  household   Household      @relation(fields: [householdId], references: [id])
+  deviceId    String?
+  device      Device?        @relation(fields: [deviceId], references: [id])
+  category    String
+  description String
+  priority    TicketPriority @default(NORMAL)
+  status      TicketStatus   @default(NEW)
+  createdAt   DateTime       @default(now())
+  resolvedAt  DateTime?
+
+  messages SupportMessage[]
+}
+
+model SupportMessage {
+  id           String        @id @default(cuid())
+  ticketId     String
+  ticket       SupportTicket @relation(fields: [ticketId], references: [id])
+  authorUserId String
+  author       User          @relation(fields: [authorUserId], references: [id])
+  content      String
+  createdAt    DateTime      @default(now())
+}
+
+model Note {
+  id           String    @id @default(cuid())
+  householdId  String
+  household    Household @relation(fields: [householdId], references: [id])
+  authorUserId String
+  author       User      @relation("NoteAuthor", fields: [authorUserId], references: [id])
+  content      String
+  createdAt    DateTime  @default(now())
+}
+
+model OnboardingStep {
+  id          String    @id @default(cuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id])
+  stepKey     String
+  completedAt DateTime?
+
+  @@unique([householdId, stepKey])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  type      String
+  recipient String
+  payload   Json
+  status    String   @default("pending")
+  sentAt    DateTime?
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  actorUserId  String
+  actor        User     @relation(fields: [actorUserId], references: [id])
+  action       String
+  targetType   String
+  targetId     String
+  metadata     Json?
+  createdAt    DateTime @default(now())
+}
