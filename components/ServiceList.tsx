@@ -26,7 +26,7 @@ function iconFor(service: string): LucideIcon {
   return Wrench;
 }
 
-export function ServiceList({ services }: { services: string[] }) {
+export function ServiceList({ services }: { services: readonly string[] }) {
   return (
     <ul className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
       {services.map((service) => {

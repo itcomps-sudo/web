@@ -15,8 +15,8 @@ export const businessConfig = {
   name: "IT Computer Solutions",
   tagline: "Technology shouldn't be frustrating.",
   domain: "itcomps.com",
-  phone: "(704) 882-5188", // placeholder — update to your real number
-  email: "support@itcomps.com", // placeholder — update to your real inbox
+  phone: "(704) 882-5188",
+  email: "support@itcomps.com",
   hours: "Monday–Friday, 9am–5pm Eastern",
   address: "Indian Trail, NC", // placeholder — update to your real service area
 
