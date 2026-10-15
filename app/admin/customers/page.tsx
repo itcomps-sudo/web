@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
+import { requireAdminSession } from "@/lib/auth-guards";
+import { primaryButton } from "@/components/admin/form-ui";
 
 export default async function AdminCustomersPage() {
+  await requireAdminSession();
+
   const households = await db.household.findMany({
     include: { plan: true, users: true, devices: true },
     orderBy: { createdAt: "desc" },
@@ -9,7 +13,12 @@ export default async function AdminCustomersPage() {
 
   return (
     <div>
-      <h1 className="font-display text-3xl font-semibold text-ink">Customers</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="font-display text-3xl font-semibold text-ink">Customers</h1>
+        <Link href="/admin/customers/new" className={primaryButton}>
+          Add customer
+        </Link>
+      </div>
       <div className="mt-6 overflow-hidden rounded-xl2 border border-mist bg-white">
         <table className="w-full text-left">
           <thead className="border-b border-mist bg-mist/30 text-sm uppercase tracking-wide text-ink/60">

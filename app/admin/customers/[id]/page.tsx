@@ -1,5 +1,11 @@
+import Link from "next/link";
 import { db } from "@/lib/db";
 import { notFound } from "next/navigation";
+import { requireAdminSession } from "@/lib/auth-guards";
+import { formatRustDeskId } from "@/lib/rustdesk";
+import { label } from "@/lib/ticket-config";
+import CopyButton from "@/components/admin/CopyButton";
+import { primaryButton } from "@/components/admin/form-ui";
 
 const ONBOARDING_STEPS = [
   "about_you",
@@ -12,12 +18,14 @@ const ONBOARDING_STEPS = [
 ];
 
 export default async function AdminCustomerDetailPage({ params }: { params: { id: string } }) {
+  await requireAdminSession();
+
   const household = await db.household.findUnique({
     where: { id: params.id },
     include: {
       plan: true,
       users: true,
-      devices: true,
+      devices: { orderBy: { name: "asc" } },
       supportTickets: { orderBy: { createdAt: "desc" } },
       notes: { orderBy: { createdAt: "desc" }, include: { author: true } },
       onboardingSteps: true,
@@ -67,14 +75,33 @@ export default async function AdminCustomerDetailPage({ params }: { params: { id
       </section>
 
       <section className="mt-6 rounded-xl2 border border-mist bg-white p-6">
-        <h2 className="font-semibold text-ink">Devices</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold text-ink">Devices</h2>
+          <Link href={`/admin/devices/new?householdId=${household.id}`} className={primaryButton}>
+            Add device
+          </Link>
+        </div>
         {household.devices.length === 0 ? (
           <p className="mt-2 text-ink/60">No devices registered yet.</p>
         ) : (
-          <ul className="mt-3 space-y-2">
+          <ul className="mt-3 space-y-3">
             {household.devices.map((d) => (
-              <li key={d.id} className="text-ink/80">
-                {d.name} — {d.manufacturer} {d.model}, {d.os} {d.osVersion} — status: {d.status}
+              <li key={d.id} className="flex items-center justify-between gap-4 border-b border-mist pb-3 last:border-0">
+                <div>
+                  <Link href={`/admin/devices/${d.id}`} className="font-medium text-ink hover:underline">
+                    {d.name}
+                  </Link>
+                  <p className="text-sm text-ink/70">
+                    {[d.manufacturer, d.model].filter(Boolean).join(" ")}
+                    {d.os ? ` · ${[d.os, d.osVersion].filter(Boolean).join(" ")}` : ""} · {label(d.status)}
+                  </p>
+                </div>
+                {d.rustdeskId && (
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono text-ink/90">{formatRustDeskId(d.rustdeskId)}</span>
+                    <CopyButton value={d.rustdeskId} />
+                  </div>
+                )}
               </li>
             ))}
           </ul>
@@ -82,14 +109,21 @@ export default async function AdminCustomerDetailPage({ params }: { params: { id
       </section>
 
       <section className="mt-6 rounded-xl2 border border-mist bg-white p-6">
-        <h2 className="font-semibold text-ink">Support History</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold text-ink">Support History</h2>
+          <Link href={`/admin/tickets/new?householdId=${household.id}`} className={primaryButton}>
+            Log ticket
+          </Link>
+        </div>
         {household.supportTickets.length === 0 ? (
           <p className="mt-2 text-ink/60">No support requests yet.</p>
         ) : (
           <ul className="mt-3 space-y-3">
             {household.supportTickets.map((t) => (
               <li key={t.id} className="border-b border-mist pb-3 last:border-0">
-                <p className="font-medium text-ink">{t.category} — {t.status} ({t.priority})</p>
+                <Link href={`/admin/tickets/${t.id}`} className="font-medium text-ink hover:underline">
+                  #{t.ticketNo} {t.subject ?? t.category} — {label(t.status)} ({label(t.priority)})
+                </Link>
                 <p className="text-ink/70">{t.description}</p>
               </li>
             ))}

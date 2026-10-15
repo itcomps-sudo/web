@@ -44,6 +44,15 @@ enum TicketPriority {
   URGENT
 }
 
+enum TicketSource {
+  PORTAL
+  PHONE
+  TEXT
+  EMAIL
+  WALK_IN
+  MANUAL
+}
+
 enum LeadIntent {
   REPAIR_CUSTOMER
   SENIOR_SAFE_PROSPECT
@@ -106,6 +115,14 @@ model Device {
   securityStatus   String?
   encryptionStatus String?
   rmmExternalId    String?
+  // Remote-access and hardware details tracked by hand from the admin area.
+  // NOTE: never store RustDesk permanent passwords here — ID only.
+  rustdeskId       String?
+  cpu              String?
+  antivirus        String?
+  backupStatus     String?
+  warrantyEndsAt   DateTime?
+  notes            String?
   lastCheckIn      DateTime?
   lastHealthCheck  DateTime?
   status           DeviceStatus @default(UNKNOWN)
@@ -179,11 +196,14 @@ model ConversationMessage {
 
 model SupportTicket {
   id          String         @id @default(cuid())
+  ticketNo    Int            @unique @default(autoincrement())
   householdId String
   household   Household      @relation(fields: [householdId], references: [id])
   deviceId    String?
   device      Device?        @relation(fields: [deviceId], references: [id])
   category    String
+  subject     String?
+  source      TicketSource   @default(PORTAL)
   description String
   priority    TicketPriority @default(NORMAL)
   status      TicketStatus   @default(NEW)
@@ -200,6 +220,9 @@ model SupportMessage {
   authorUserId String
   author       User          @relation(fields: [authorUserId], references: [id])
   content      String
+  // Internal messages are admin-only. Any future customer-facing view of a
+  // ticket must filter on internal = false.
+  internal     Boolean       @default(false)
   createdAt    DateTime      @default(now())
 }
 

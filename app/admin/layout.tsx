@@ -15,6 +15,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <Link href="/admin/customers" className="rounded-lg px-3 py-2 text-ink/80 hover:bg-mist">
             Customers
           </Link>
+          <Link href="/admin/devices" className="rounded-lg px-3 py-2 text-ink/80 hover:bg-mist">
+            Devices
+          </Link>
+          <Link href="/admin/tickets" className="rounded-lg px-3 py-2 text-ink/80 hover:bg-mist">
+            Tickets
+          </Link>
         </nav>
       </aside>
       <div className="flex-1">{children}</div>
