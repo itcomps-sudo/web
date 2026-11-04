@@ -6,6 +6,7 @@ import { formatRustDeskId } from "@/lib/rustdesk";
 import { label } from "@/lib/ticket-config";
 import CopyButton from "@/components/admin/CopyButton";
 import { primaryButton } from "@/components/admin/form-ui";
+import { formatDate } from "@/lib/format-date";
 
 const ONBOARDING_STEPS = [
   "about_you",
@@ -52,7 +53,7 @@ export default async function AdminCustomerDetailPage({ params }: { params: { id
             <div><dt className="inline font-medium">Status: </dt><dd className="inline">{household.subscriptionStatus}</dd></div>
             <div><dt className="inline font-medium">Square Customer ID: </dt><dd className="inline">{household.squareCustomerId ?? "—"}</dd></div>
             <div><dt className="inline font-medium">Square Subscription ID: </dt><dd className="inline">{household.squareSubscriptionId ?? "—"}</dd></div>
-            <div><dt className="inline font-medium">Signed up: </dt><dd className="inline">{household.createdAt.toDateString()}</dd></div>
+            <div><dt className="inline font-medium">Signed up: </dt><dd className="inline">{formatDate(household.createdAt)}</dd></div>
           </dl>
         </div>
 
@@ -141,7 +142,7 @@ export default async function AdminCustomerDetailPage({ params }: { params: { id
             {household.notes.map((n) => (
               <li key={n.id} className="border-b border-mist pb-3 last:border-0">
                 <p className="text-ink/80">{n.content}</p>
-                <p className="text-sm text-ink/50">— {n.author.name}, {n.createdAt.toDateString()}</p>
+                <p className="text-sm text-ink/50">— {n.author.name}, {formatDate(n.createdAt)}</p>
               </li>
             ))}
           </ul>

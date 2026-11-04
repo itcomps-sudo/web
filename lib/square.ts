@@ -18,6 +18,17 @@ export type SquareSubscriptionSummary = {
   /** Mapped to the portal's status values. */
   status: "ACTIVE" | "PENDING" | "PAUSED" | "CANCELED";
   rawStatus: string;
+  /** Square plan variation ID (matches Plan.squareVariationId). */
+  planVariationId: string;
+  /** Plan / variation names from the Square catalog, for matching and display. */
+  planName: string;
+  variationName: string;
+  /**
+   * Square often keeps duplicate customer profiles for one person. When the
+   * subscription was found on a different profile (same email or phone), this
+   * is that profile's ID; it's the one Square actually bills.
+   */
+  billedCustomerId: string;
 };
 
 export function squareConfigured(): boolean {
@@ -127,29 +138,82 @@ const STATUS_MAP: Record<string, SquareSubscriptionSummary["status"]> = {
   DEACTIVATED: "CANCELED",
 };
 
-/** One customer plus their most relevant subscription (an active one if there is one). */
+type RawSubscription = { id?: string; status?: string; customerId?: string; planVariationId?: string; planId?: string };
+
+function pickBest(list: RawSubscription[]): RawSubscription | undefined {
+  return list.find((s) => s.status === "ACTIVE") ?? list.find((s) => s.status === "PENDING") ?? list[0];
+}
+
+async function subscriptionsFor(sq: Client, customerIds: string[]): Promise<RawSubscription[]> {
+  if (customerIds.length === 0) return [];
+  const { result } = await sq.subscriptionsApi.searchSubscriptions({
+    query: { filter: { customerIds } },
+  });
+  return (result.subscriptions ?? []) as RawSubscription[];
+}
+
+/** Other Square profiles with the same email or phone (Square duplicates are common). */
+async function siblingCustomerIds(sq: Client, c: SquareCustomer): Promise<string[]> {
+  const ids = new Set<string>();
+  const queries: Parameters<Client["customersApi"]["searchCustomers"]>[0][] = [];
+  if (c.email) queries.push({ limit: BigInt(25), query: { filter: { emailAddress: { exact: c.email } } } });
+  const digits = c.phone.replace(/\D/g, "");
+  if (digits.length >= 7) queries.push({ limit: BigInt(25), query: { filter: { phoneNumber: { fuzzy: digits.slice(-10) } } } });
+  for (const body of queries) {
+    const { result } = await sq.customersApi.searchCustomers(body);
+    for (const r of result.customers ?? []) if (r.id && r.id !== c.id) ids.add(r.id);
+  }
+  return [...ids];
+}
+
+/** Looks up the plan and variation names for a plan variation ID. Never throws. */
+async function planNames(sq: Client, variationId: string): Promise<{ planName: string; variationName: string }> {
+  if (!variationId) return { planName: "", variationName: "" };
+  try {
+    const { result } = await sq.catalogApi.retrieveCatalogObject(variationId);
+    const v = result.object;
+    const variationName = v?.subscriptionPlanVariationData?.name ?? "";
+    const parentId = v?.subscriptionPlanVariationData?.subscriptionPlanId ?? "";
+    let planName = v?.subscriptionPlanData?.name ?? "";
+    if (parentId) {
+      const parent = await sq.catalogApi.retrieveCatalogObject(parentId);
+      planName = parent.result.object?.subscriptionPlanData?.name ?? planName;
+    }
+    return { planName, variationName };
+  } catch {
+    return { planName: "", variationName: "" };
+  }
+}
+
+/**
+ * One customer plus their most relevant subscription (an active one if there is one).
+ * If the chosen profile has no subscription, checks duplicate profiles with the
+ * same email or phone before giving up.
+ */
 export async function getSquareCustomer(
   customerId: string
 ): Promise<{ customer: SquareCustomer; subscription: SquareSubscriptionSummary | null }> {
   const sq = client();
   const { result } = await sq.customersApi.retrieveCustomer(customerId);
   if (!result.customer) throw new Error("Square did not return that customer.");
+  const customer = toCustomer(result.customer);
 
-  const subs = await sq.subscriptionsApi.searchSubscriptions({
-    query: { filter: { customerIds: [customerId] } },
-  });
-  const list = subs.result.subscriptions ?? [];
-  const best = list.find((s) => s.status === "ACTIVE") ?? list.find((s) => s.status === "PENDING") ?? list[0];
+  let best = pickBest(await subscriptionsFor(sq, [customerId]));
+  if (!best) best = pickBest(await subscriptionsFor(sq, await siblingCustomerIds(sq, customer)));
+  if (!best || !best.id) return { customer, subscription: null };
+
+  const planVariationId = best.planVariationId ?? best.planId ?? "";
+  const names = await planNames(sq, planVariationId);
 
   return {
-    customer: toCustomer(result.customer),
-    subscription:
-      best && best.id
-        ? {
-            id: best.id,
-            rawStatus: best.status ?? "",
-            status: STATUS_MAP[best.status ?? ""] ?? "PENDING",
-          }
-        : null,
+    customer,
+    subscription: {
+      id: best.id,
+      rawStatus: best.status ?? "",
+      status: STATUS_MAP[best.status ?? ""] ?? "PENDING",
+      planVariationId,
+      ...names,
+      billedCustomerId: best.customerId ?? customerId,
+    },
   };
 }

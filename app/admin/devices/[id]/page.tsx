@@ -7,6 +7,7 @@ import { label } from "@/lib/ticket-config";
 import CopyButton from "@/components/admin/CopyButton";
 import DeviceForm from "@/components/admin/DeviceForm";
 import { primaryButton } from "@/components/admin/form-ui";
+import { formatDate } from "@/lib/format-date";
 
 export default async function DeviceDetailPage({
   params,
@@ -73,7 +74,7 @@ export default async function DeviceDetailPage({
                   #{t.ticketNo} {t.subject ?? t.category}
                 </Link>
                 <p className="text-sm text-ink/60">
-                  {label(t.status)} · {t.createdAt.toDateString()}
+                  {label(t.status)} · {formatDate(t.createdAt)}
                 </p>
               </li>
             ))}

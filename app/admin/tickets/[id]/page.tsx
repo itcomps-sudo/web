@@ -7,6 +7,7 @@ import { formatRustDeskId } from "@/lib/rustdesk";
 import { TICKET_PRIORITIES, TICKET_STATUSES, label } from "@/lib/ticket-config";
 import CopyButton from "@/components/admin/CopyButton";
 import { ErrorBanner, Field, inputClass, primaryButton } from "@/components/admin/form-ui";
+import { formatDate, formatDateTime } from "@/lib/format-date";
 
 export default async function TicketDetailPage({
   params,
@@ -55,9 +56,9 @@ export default async function TicketDetailPage({
           <dl className="mt-3 space-y-1 text-ink/80">
             <div><dt className="inline font-medium">Category: </dt><dd className="inline">{ticket.category}</dd></div>
             <div><dt className="inline font-medium">Came in by: </dt><dd className="inline">{label(ticket.source)}</dd></div>
-            <div><dt className="inline font-medium">Opened: </dt><dd className="inline">{ticket.createdAt.toDateString()}</dd></div>
+            <div><dt className="inline font-medium">Opened: </dt><dd className="inline">{formatDate(ticket.createdAt)}</dd></div>
             {ticket.resolvedAt && (
-              <div><dt className="inline font-medium">Resolved: </dt><dd className="inline">{ticket.resolvedAt.toDateString()}</dd></div>
+              <div><dt className="inline font-medium">Resolved: </dt><dd className="inline">{formatDate(ticket.resolvedAt)}</dd></div>
             )}
           </dl>
           <p className="mt-4 whitespace-pre-wrap text-ink/90">{ticket.description}</p>
@@ -134,7 +135,7 @@ export default async function TicketDetailPage({
               <li key={m.id} className="border-b border-mist pb-3 last:border-0">
                 <p className="whitespace-pre-wrap text-ink/90">{m.content}</p>
                 <p className="text-sm text-ink/50">
-                  {m.author.name}, {m.createdAt.toLocaleString("en-US")}
+                  {m.author.name}, {formatDateTime(m.createdAt)}
                   {m.internal && (
                     <span className="ml-2 rounded-full bg-mist px-2 py-0.5 text-xs font-medium text-ink/70">
                       Internal

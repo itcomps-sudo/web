@@ -59,6 +59,18 @@ export default async function NewCustomerPage({
   const c = picked2?.customer;
   const sub = picked2?.subscription ?? null;
 
+  // Pre-select the portal plan that matches Square's: by linked variation ID
+  // first, then by name ("Senior Safe Computing Plan" -> "Senior Safe Computing").
+  const norm = (x: string) => x.toLowerCase().replace(/\b(plan|monthly|annual|yearly)\b/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+  const matchedPlan = sub
+    ? plans.find((p) => p.squareVariationId && p.squareVariationId === sub.planVariationId) ??
+      plans.find((p) => {
+        const n = norm(p.name);
+        return Boolean(n) && [sub.planName, sub.variationName].some((sn) => sn && (norm(sn).includes(n) || n.includes(norm(sn))));
+      })
+    : undefined;
+  const squarePlanLabel = sub ? sub.planName || sub.variationName : "";
+
   return (
     <div>
       <h1 className="font-display text-3xl font-semibold text-ink">Add customer</h1>
@@ -133,8 +145,14 @@ export default async function NewCustomerPage({
       {picked2 ? (
         <p className="mt-6 rounded-lg border border-sage bg-sage-light px-4 py-3 text-ink">
           Filled in from Square: <strong>{picked2.customer.name}</strong>
-          {sub ? ` (subscription ${sub.rawStatus.toLowerCase()})` : " (no subscription found in Square)"}. Check the details, pick
-          their plan, and click Add customer.
+          {sub
+            ? ` (subscription ${sub.rawStatus.toLowerCase()}${squarePlanLabel ? `, ${squarePlanLabel}` : ""})`
+            : " (no subscription found in Square, including duplicate profiles with the same email or phone)"}
+          .{" "}
+          {sub && sub.billedCustomerId !== picked2.customer.id && (
+            <>The subscription is on a different Square profile for this person, so that profile&apos;s ID is filled in below. </>
+          )}
+          Check the details{sub && !matchedPlan ? ", pick their plan" : ""}, and click Add customer.
         </p>
       ) : null}
       {alreadyHere && (
@@ -175,12 +193,14 @@ export default async function NewCustomerPage({
             hint={
               plans.length === 0
                 ? "No plans are saved in the database yet, so this can stay empty for now."
-                : sub
-                  ? "Square's plan names don't match the plans saved here, so choose this one yourself."
-                  : undefined
+                : sub && !matchedPlan
+                  ? `Couldn't match Square's plan${squarePlanLabel ? ` (${squarePlanLabel})` : ""} to a plan here, so choose this one yourself.`
+                  : matchedPlan
+                    ? "Matched from the Square subscription."
+                    : undefined
             }
           >
-            <select id="planId" name="planId" defaultValue="" className={inputClass}>
+            <select id="planId" name="planId" defaultValue={matchedPlan?.id ?? ""} className={inputClass}>
               <option value="">No plan recorded</option>
               {plans.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -204,7 +224,7 @@ export default async function NewCustomerPage({
               id="squareCustomerId"
               name="squareCustomerId"
               maxLength={100}
-              defaultValue={c?.id ?? ""}
+              defaultValue={sub?.billedCustomerId ?? c?.id ?? ""}
               className={inputClass}
             />
           </Field>

@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { requireAdminSession } from "@/lib/auth-guards";
 import { OPEN_TICKET_STATUSES, TICKET_STATUSES, label } from "@/lib/ticket-config";
 import { primaryButton } from "@/components/admin/form-ui";
+import { formatDate } from "@/lib/format-date";
 
 const PRIORITY_STYLE: Record<string, string> = {
   LOW: "text-ink/50",
@@ -100,7 +101,7 @@ export default async function AdminTicketsPage({ searchParams }: { searchParams:
                 <td className={`px-4 py-3 ${PRIORITY_STYLE[t.priority]}`}>{label(t.priority)}</td>
                 <td className="px-4 py-3 text-ink/80">{label(t.status)}</td>
                 <td className="px-4 py-3 text-ink/80">{label(t.source)}</td>
-                <td className="px-4 py-3 text-ink/60">{t.createdAt.toLocaleDateString("en-US")}</td>
+                <td className="px-4 py-3 text-ink/60">{formatDate(t.createdAt)}</td>
               </tr>
             ))}
           </tbody>
