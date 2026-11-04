@@ -276,6 +276,14 @@ export default async function NewCustomerPage({
           </Field>
         </div>
 
+        <label className="mt-5 flex items-start gap-3 text-ink">
+          <input type="checkbox" name="setupTicket" defaultChecked className="mt-1 h-5 w-5" />
+          <span>
+            Also create a &ldquo;New customer setup&rdquo; ticket
+            <span className="block text-sm text-ink/50">A place for your setup notes and time. A setup checklist is added either way.</span>
+          </span>
+        </label>
+
         <p className="mt-5 text-sm text-ink/50">
           The customer can&apos;t sign in to the portal yet; a sign-in or invite flow comes later. Nothing is emailed to them.
         </p>

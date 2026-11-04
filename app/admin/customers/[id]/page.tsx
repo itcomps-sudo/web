@@ -7,6 +7,8 @@ import { label } from "@/lib/ticket-config";
 import CopyButton from "@/components/admin/CopyButton";
 import { primaryButton, secondaryLink } from "@/components/admin/form-ui";
 import { formatDate } from "@/lib/format-date";
+import { toggleSetupStep } from "@/app/admin/actions";
+import { SETUP_STEPS } from "@/lib/setup-checklist";
 
 const ONBOARDING_STEPS = [
   "about_you",
@@ -36,6 +38,8 @@ export default async function AdminCustomerDetailPage({ params }: { params: { id
   if (!household) notFound();
 
   const completedSteps = new Set(household.onboardingSteps.map((s) => s.stepKey));
+  const doneSetup = new Set(household.onboardingSteps.filter((s) => s.completedAt).map((s) => s.stepKey));
+  const setupDone = SETUP_STEPS.filter((s) => doneSetup.has(s.key)).length;
 
   return (
     <div>
@@ -83,6 +87,46 @@ export default async function AdminCustomerDetailPage({ params }: { params: { id
             ))}
           </ul>
         </div>
+      </section>
+
+      <section className="mt-6 rounded-xl2 border border-mist bg-white p-6">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold text-ink">Setup checklist</h2>
+          <span className="text-sm text-ink/60">
+            {setupDone} of {SETUP_STEPS.length} done
+          </span>
+        </div>
+        <ul className="mt-3 divide-y divide-mist">
+          {SETUP_STEPS.map((step) => {
+            const done = doneSetup.has(step.key);
+            return (
+              <li key={step.key}>
+                <form action={toggleSetupStep}>
+                  <input type="hidden" name="householdId" value={household.id} />
+                  <input type="hidden" name="stepKey" value={step.key} />
+                  <button
+                    type="submit"
+                    className="flex w-full items-center gap-3 py-2.5 text-left hover:bg-mist/20"
+                    aria-label={`${done ? "Mark not done" : "Mark done"}: ${step.label}`}
+                  >
+                    <span
+                      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded border text-sm font-bold ${
+                        done ? "border-sage bg-sage text-white" : "border-ink/30 bg-white text-transparent"
+                      }`}
+                      aria-hidden
+                    >
+                      &#10003;
+                    </span>
+                    <span>
+                      <span className={done ? "text-ink/50 line-through" : "text-ink"}>{step.label}</span>
+                      <span className="block text-sm text-ink/50">{step.hint}</span>
+                    </span>
+                  </button>
+                </form>
+              </li>
+            );
+          })}
+        </ul>
       </section>
 
       <section className="mt-6 rounded-xl2 border border-mist bg-white p-6">

@@ -2,12 +2,18 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireAdminSession } from "@/lib/auth-guards";
 import { primaryButton } from "@/components/admin/form-ui";
+import { SETUP_STEPS } from "@/lib/setup-checklist";
 
 export default async function AdminCustomersPage() {
   await requireAdminSession();
 
   const households = await db.household.findMany({
-    include: { plan: true, users: true, devices: true },
+    include: {
+      plan: true,
+      users: true,
+      devices: true,
+      onboardingSteps: { where: { stepKey: { startsWith: "setup_" }, completedAt: { not: null } }, select: { id: true } },
+    },
     orderBy: { createdAt: "desc" },
   });
 
@@ -27,6 +33,7 @@ export default async function AdminCustomersPage() {
               <th className="px-4 py-3">Plan</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Devices</th>
+              <th className="px-4 py-3">Setup</th>
             </tr>
           </thead>
           <tbody>
@@ -40,6 +47,13 @@ export default async function AdminCustomersPage() {
                 <td className="px-4 py-3 text-ink/80">{h.plan?.name ?? "—"}</td>
                 <td className="px-4 py-3 text-ink/80">{h.subscriptionStatus}</td>
                 <td className="px-4 py-3 text-ink/80">{h.devices.length}</td>
+                <td className="px-4 py-3 text-ink/80">
+                  {h.onboardingSteps.length >= SETUP_STEPS.length ? (
+                    <span className="font-medium text-sage">Done</span>
+                  ) : (
+                    `${h.onboardingSteps.length}/${SETUP_STEPS.length}`
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>

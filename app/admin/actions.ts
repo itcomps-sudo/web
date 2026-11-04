@@ -8,6 +8,7 @@ import bcrypt from "bcryptjs";
 import { DeviceStatus, SubscriptionStatus, TicketPriority, TicketSource, TicketStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireAdminActor } from "@/lib/admin-actor";
+import { SETUP_STEP_KEYS, setSetupStep } from "@/lib/setup-checklist";
 import { normalizeRustDeskId, RUSTDESK_ID_PATTERN } from "@/lib/rustdesk";
 import { CLOSED_TICKET_STATUSES, TICKET_CATEGORIES } from "@/lib/ticket-config";
 
@@ -153,6 +154,9 @@ export async function saveDevice(formData: FormData): Promise<void> {
       metadata: { householdId: d.householdId },
     },
   });
+
+  // Saving a computer with a RustDesk ID ticks that setup step.
+  if (d.rustdeskId) await setSetupStep(d.householdId, "setup_device", true);
 
   revalidatePath("/admin/devices");
   revalidatePath(`/admin/customers/${d.householdId}`);
@@ -379,6 +383,14 @@ export async function createCustomer(formData: FormData): Promise<void> {
       squareCustomerId: c.squareCustomerId ?? null,
       squareSubscriptionId: c.squareSubscriptionId ?? null,
       users: { create: { name: c.name, email: c.email, phone: c.phone ?? null, passwordHash, role: "CUSTOMER" } },
+      // Setup checklist: these steps are already true when the customer is added.
+      onboardingSteps: {
+        create: [
+          { stepKey: "setup_portal", completedAt: new Date() },
+          ...(c.squareCustomerId ? [{ stepKey: "setup_square_customer", completedAt: new Date() }] : []),
+          ...(c.squareSubscriptionId ? [{ stepKey: "setup_subscription", completedAt: new Date() }] : []),
+        ],
+      },
       // A Subscription row needs both a plan and the Square subscription ID.
       ...(c.planId && c.squareSubscriptionId
         ? {
@@ -400,8 +412,44 @@ export async function createCustomer(formData: FormData): Promise<void> {
     },
   });
 
+  // Optional: a ticket to hold the setup notes and time for this customer.
+  if (formData.get("setupTicket") === "on") {
+    await db.supportTicket.create({
+      data: {
+        householdId: household.id,
+        category: "New device setup",
+        subject: `New customer setup: ${c.name}`,
+        source: TicketSource.MANUAL,
+        description: "Setup work for a new customer. Add an internal note for each step, with the minutes at the start.",
+        status: TicketStatus.OPEN,
+        priority: TicketPriority.NORMAL,
+      },
+    });
+  }
+
   revalidatePath("/admin/customers");
   redirect(`/admin/customers/${household.id}`);
+}
+
+/** Ticks or unticks one step of a customer's setup checklist. */
+export async function toggleSetupStep(formData: FormData): Promise<void> {
+  await requireAdminActor();
+  const householdId = text(formData, "householdId") ?? "";
+  const stepKey = text(formData, "stepKey") ?? "";
+  if (!householdId || !SETUP_STEP_KEYS.includes(stepKey)) redirect("/admin/customers");
+
+  const household = await db.household.findUnique({ where: { id: householdId }, select: { id: true } });
+  if (!household) redirect("/admin/customers");
+
+  const current = await db.onboardingStep.findUnique({
+    where: { householdId_stepKey: { householdId, stepKey } },
+    select: { completedAt: true },
+  });
+  await setSetupStep(householdId, stepKey, !current?.completedAt);
+
+  revalidatePath(`/admin/customers/${householdId}`);
+  revalidatePath("/admin/customers");
+  redirect(`/admin/customers/${householdId}`);
 }
 
 /**
