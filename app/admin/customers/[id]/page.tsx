@@ -5,7 +5,7 @@ import { requireAdminSession } from "@/lib/auth-guards";
 import { formatRustDeskId } from "@/lib/rustdesk";
 import { label } from "@/lib/ticket-config";
 import CopyButton from "@/components/admin/CopyButton";
-import { primaryButton } from "@/components/admin/form-ui";
+import { primaryButton, secondaryLink } from "@/components/admin/form-ui";
 import { formatDate } from "@/lib/format-date";
 
 const ONBOARDING_STEPS = [
@@ -39,9 +39,19 @@ export default async function AdminCustomerDetailPage({ params }: { params: { id
 
   return (
     <div>
-      <h1 className="font-display text-3xl font-semibold text-ink">
-        {household.users[0]?.name ?? "Household"}
-      </h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="font-display text-3xl font-semibold text-ink">
+          {household.users[0]?.name ?? "Household"}
+        </h1>
+        <div className="flex gap-3">
+          <Link href={`/admin/customers/${household.id}/edit`} className={secondaryLink}>
+            Edit
+          </Link>
+          <Link href={`/admin/customers/${household.id}/merge`} className={secondaryLink}>
+            Merge duplicate
+          </Link>
+        </div>
+      </div>
 
       <section className="mt-6 grid gap-6 md:grid-cols-2">
         <div className="rounded-xl2 border border-mist bg-white p-6">

@@ -403,3 +403,176 @@ export async function createCustomer(formData: FormData): Promise<void> {
   revalidatePath("/admin/customers");
   redirect(`/admin/customers/${household.id}`);
 }
+
+/**
+ * Edits an existing customer: contact details, plan, status and Square IDs.
+ * Changing things here never changes anything in Square.
+ */
+export async function updateCustomer(formData: FormData): Promise<void> {
+  const { userId } = await requireAdminActor();
+  const id = text(formData, "id") ?? "";
+  if (!id) redirect("/admin/customers");
+  const back = `/admin/customers/${id}/edit`;
+
+  const parsed = customerSchema.safeParse({
+    name: text(formData, "name") ?? "",
+    email: (text(formData, "email") ?? "").toLowerCase(),
+    phone: text(formData, "phone"),
+    address: text(formData, "address"),
+    planId: text(formData, "planId"),
+    status: text(formData, "status") ?? "ACTIVE",
+    squareCustomerId: text(formData, "squareCustomerId"),
+    squareSubscriptionId: text(formData, "squareSubscriptionId"),
+  });
+  if (!parsed.success) withError(back, firstError(parsed.error));
+  const c = parsed.data;
+
+  const household = await db.household.findUnique({
+    where: { id },
+    select: { id: true, users: { select: { id: true, email: true }, orderBy: { createdAt: "asc" } } },
+  });
+  if (!household) redirect("/admin/customers");
+  const primary = household.users[0];
+
+  if (!primary || c.email !== primary.email) {
+    const emailTaken = await db.user.findUnique({ where: { email: c.email }, select: { id: true } });
+    if (emailTaken && emailTaken.id !== primary?.id) withError(back, "Another customer already uses that email.");
+  }
+
+  if (c.planId) {
+    const plan = await db.plan.findUnique({ where: { id: c.planId }, select: { id: true } });
+    if (!plan) withError(back, "That plan no longer exists.");
+  }
+
+  if (c.squareSubscriptionId) {
+    const subElsewhere = await db.subscription.findFirst({
+      where: { squareSubscriptionId: c.squareSubscriptionId, householdId: { not: id } },
+      select: { id: true },
+    });
+    if (subElsewhere) withError(back, "That Square subscription ID is already saved on another customer.");
+  }
+
+  await db.$transaction(async (tx) => {
+    await tx.household.update({
+      where: { id },
+      data: {
+        email: c.email,
+        phone: c.phone ?? null,
+        address: c.address ?? null,
+        planId: c.planId ?? null,
+        subscriptionStatus: c.status,
+        squareCustomerId: c.squareCustomerId ?? null,
+        squareSubscriptionId: c.squareSubscriptionId ?? null,
+      },
+    });
+    if (primary) {
+      await tx.user.update({
+        where: { id: primary.id },
+        data: { name: c.name, email: c.email, phone: c.phone ?? null },
+      });
+    }
+    if (c.planId && c.squareSubscriptionId) {
+      await tx.subscription.upsert({
+        where: { squareSubscriptionId: c.squareSubscriptionId },
+        update: { planId: c.planId, status: c.status },
+        create: { householdId: id, planId: c.planId, squareSubscriptionId: c.squareSubscriptionId, status: c.status },
+      });
+    }
+  });
+
+  await db.auditLog.create({
+    data: {
+      actorUserId: userId,
+      action: "customer_updated",
+      targetType: "Household",
+      targetId: id,
+      metadata: { planId: c.planId ?? null, status: c.status },
+    },
+  });
+
+  revalidatePath("/admin/customers");
+  revalidatePath(`/admin/customers/${id}`);
+  redirect(`/admin/customers/${id}`);
+}
+
+/**
+ * Merges a duplicate customer into the one you keep: devices, tickets, notes,
+ * subscriptions and chats move over, blank details are copied across, and the
+ * duplicate record is then deleted. This cannot be undone.
+ */
+export async function mergeCustomers(formData: FormData): Promise<void> {
+  const { userId } = await requireAdminActor();
+  const sourceId = text(formData, "sourceId") ?? "";
+  const targetId = text(formData, "targetId") ?? "";
+  const back = `/admin/customers/${sourceId}/merge`;
+
+  if (!sourceId) redirect("/admin/customers");
+  if (!targetId) withError(back, "Choose which customer to keep.");
+  if (sourceId === targetId) withError(back, "Pick a different customer to keep.");
+  if (formData.get("confirm") !== "on") withError(back, "Tick the box to confirm the merge.");
+
+  const [source, target] = await Promise.all([
+    db.household.findUnique({ where: { id: sourceId }, include: { users: { orderBy: { createdAt: "asc" } } } }),
+    db.household.findUnique({ where: { id: targetId }, include: { users: { orderBy: { createdAt: "asc" } } } }),
+  ]);
+  if (!source) redirect("/admin/customers");
+  if (!target) withError(back, "The customer you chose to keep no longer exists.");
+
+  // Never delete a staff login by accident.
+  if (source.users.some((u) => u.role === "ADMIN")) {
+    withError(back, "This record includes an admin login, so it can't be merged away.");
+  }
+
+  await db.$transaction(async (tx) => {
+    await tx.device.updateMany({ where: { householdId: sourceId }, data: { householdId: targetId } });
+    await tx.supportTicket.updateMany({ where: { householdId: sourceId }, data: { householdId: targetId } });
+    await tx.note.updateMany({ where: { householdId: sourceId }, data: { householdId: targetId } });
+    await tx.subscription.updateMany({ where: { householdId: sourceId }, data: { householdId: targetId } });
+    await tx.conversation.updateMany({ where: { householdId: sourceId }, data: { householdId: targetId } });
+    await tx.onboardingStep.deleteMany({ where: { householdId: sourceId } });
+
+    // Fill blanks on the kept customer; never overwrite what it already has.
+    await tx.household.update({
+      where: { id: targetId },
+      data: {
+        phone: target.phone ?? source.phone ?? null,
+        address: target.address ?? source.address ?? null,
+        planId: target.planId ?? source.planId ?? null,
+        squareCustomerId: target.squareCustomerId ?? source.squareCustomerId ?? null,
+        squareSubscriptionId: target.squareSubscriptionId ?? source.squareSubscriptionId ?? null,
+      },
+    });
+
+    // Remove the duplicate's login unless it wrote notes, messages or audit
+    // entries; in that case keep it and attach it to the kept customer.
+    for (const u of source.users) {
+      const [notes, messages, audits] = await Promise.all([
+        tx.note.count({ where: { authorUserId: u.id } }),
+        tx.supportMessage.count({ where: { authorUserId: u.id } }),
+        tx.auditLog.count({ where: { actorUserId: u.id } }),
+      ]);
+      if (notes + messages + audits === 0) {
+        await tx.user.delete({ where: { id: u.id } });
+      } else {
+        await tx.user.update({ where: { id: u.id }, data: { householdId: targetId } });
+      }
+    }
+
+    await tx.household.delete({ where: { id: sourceId } });
+  });
+
+  await db.auditLog.create({
+    data: {
+      actorUserId: userId,
+      action: "customer_merged",
+      targetType: "Household",
+      targetId: targetId,
+      metadata: { removedHouseholdId: sourceId, removedName: source.users[0]?.name ?? null },
+    },
+  });
+
+  revalidatePath("/admin/customers");
+  revalidatePath("/admin/devices");
+  revalidatePath("/admin/tickets");
+  redirect(`/admin/customers/${targetId}`);
+}

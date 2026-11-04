@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createCustomer } from "@/app/admin/actions";
 import { db } from "@/lib/db";
 import { requireAdminSession } from "@/lib/auth-guards";
+import { loadHouseholdIndex, matchDuplicates, type DuplicateMatch } from "@/lib/duplicates";
 import { label } from "@/lib/ticket-config";
 import {
   getSquareCustomer,
@@ -54,6 +55,11 @@ export default async function NewCustomerPage({
     existing.map((h): [string, string] => [String(h.squareCustomerId), String(h.id)])
   );
   const alreadyHere: string | undefined = picked ? existingBySquareId.get(picked.customer.id) : undefined;
+
+  // Look for the same person saved under another spelling, email or phone.
+  const index = results.length > 0 || picked ? await loadHouseholdIndex() : [];
+  const possibleFor = (cust: SquareCustomer): DuplicateMatch[] =>
+    matchDuplicates(index, { name: cust.name, email: cust.email, phone: cust.phone, squareCustomerId: cust.id });
 
   const picked2 = picked as { customer: SquareCustomer; subscription: SquareSubscriptionSummary | null } | null;
   const c = picked2?.customer;
@@ -118,11 +124,26 @@ export default async function NewCustomerPage({
               <ul className="mt-4 divide-y divide-mist rounded-lg border border-mist">
                 {results.map((r) => {
                   const hereId = existingBySquareId.get(r.id);
+                  const possible = hereId ? [] : possibleFor(r);
                   return (
                     <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                       <div>
                         <div className="font-semibold text-ink">{r.name}</div>
                         <div className="text-sm text-ink/60">{[r.email, r.phone].filter(Boolean).join(" · ") || "No contact info"}</div>
+                        {possible.length > 0 && (
+                          <div className="mt-1 text-sm text-clay">
+                            May already be saved as{" "}
+                            {possible.map((m, i) => (
+                              <span key={m.id}>
+                                {i > 0 ? ", " : ""}
+                                <Link href={`/admin/customers/${m.id}`} className="font-semibold underline">
+                                  {m.name}
+                                </Link>{" "}
+                                ({m.reason})
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       {hereId ? (
                         <Link href={`/admin/customers/${hereId}`} className="text-sm font-medium text-ink underline">
@@ -155,6 +176,22 @@ export default async function NewCustomerPage({
           Check the details{sub && !matchedPlan ? ", pick their plan" : ""}, and click Add customer.
         </p>
       ) : null}
+      {!alreadyHere && picked2 && possibleFor(picked2.customer).length > 0 && (
+        <div role="alert" className="mt-4 rounded-lg border border-clay bg-clay-light px-4 py-3 text-clay">
+          This looks like someone who is already saved:
+          <ul className="mt-1 list-disc pl-6">
+            {possibleFor(picked2.customer).map((m) => (
+              <li key={m.id}>
+                <Link href={`/admin/customers/${m.id}`} className="font-semibold underline">
+                  {m.name}
+                </Link>{" "}
+                ({m.reason})
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1">Open them and use Edit to link their Square details, rather than adding a second copy.</p>
+        </div>
+      )}
       {alreadyHere && (
         <p className="mt-4 rounded-lg border border-clay bg-clay-light px-4 py-3 text-clay">
           This Square customer is already saved here.{" "}
