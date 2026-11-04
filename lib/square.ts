@@ -107,7 +107,8 @@ export async function searchSquareCustomers(query: string): Promise<SquareCustom
   const matches: SquareCustomer[] = [];
   let cursor: string | undefined;
   for (let page = 0; page < 5; page++) {
-    const { result } = await api.listCustomers(cursor, 100);
+    // searchCustomers with no filter pages through everyone (a POST body, unlike listCustomers).
+    const { result } = await api.searchCustomers({ limit: BigInt(100), ...(cursor ? { cursor } : {}) });
     for (const raw of result.customers ?? []) {
       const c = toCustomer(raw);
       if (c.name.toLowerCase().includes(needle) || c.email.toLowerCase().includes(needle)) matches.push(c);
