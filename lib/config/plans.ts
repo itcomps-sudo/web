@@ -12,6 +12,9 @@
  * any other way.
  */
 
+/** Sales tax charged on top of every plan price (0.0675 = 6.75%). */
+export const SALES_TAX_RATE = 0.0675;
+
 export type PlanGroup = "home_care" | "senior_safe";
 export type AccentColor = "sage" | "amber" | "ink";
 
@@ -25,11 +28,14 @@ export type PlanConfig = {
   accent: AccentColor;
   features: string[];
   perfectFor: string;
+  /** Sales tax added on top of the price, as a fraction (0.0675 = 6.75%). Omit if none. */
+  taxRate?: number;
 };
 
 export const homeCarePlans: PlanConfig[] = [
   {
     key: "basic",
+    taxRate: SALES_TAX_RATE,
     group: "home_care",
     name: "Basic Care",
     priceCents: 1499,
@@ -48,6 +54,7 @@ export const homeCarePlans: PlanConfig[] = [
   },
   {
     key: "premium",
+    taxRate: SALES_TAX_RATE,
     group: "home_care",
     name: "Premium Care",
     priceCents: 2499,
@@ -67,6 +74,7 @@ export const homeCarePlans: PlanConfig[] = [
   },
   {
     key: "complete",
+    taxRate: SALES_TAX_RATE,
     group: "home_care",
     name: "Complete Protection",
     priceCents: 3999,
@@ -90,7 +98,8 @@ export const seniorSafePlan: PlanConfig = {
   key: "senior-safe",
   group: "senior_safe",
   name: "Senior Safe Computing",
-  priceCents: 2999,
+  priceCents: 2499,
+  taxRate: SALES_TAX_RATE,
   description: "Designed specifically for seniors — a trusted local expert, just a phone call away.",
   isPopular: false,
   accent: "amber",
@@ -106,6 +115,11 @@ export const seniorSafePlan: PlanConfig = {
     "Priority support",
   ],
 };
+
+/** "6.75%" style text for a tax rate, or an empty string when there is none. */
+export function taxRateLabel(taxRate?: number): string {
+  return taxRate ? `${parseFloat((taxRate * 100).toFixed(2))}%` : "";
+}
 
 export const plansConfig: PlanConfig[] = [...homeCarePlans, seniorSafePlan];
 

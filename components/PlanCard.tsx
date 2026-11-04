@@ -1,5 +1,5 @@
 import { FeatureList } from "./FeatureList";
-import type { PlanConfig } from "@/lib/config/plans";
+import { taxRateLabel, type PlanConfig } from "@/lib/config/plans";
 
 const accentClasses: Record<PlanConfig["accent"], { bar: string; icon: string; badge: string }> = {
   sage: { bar: "bg-sage", icon: "text-sage", badge: "bg-sage text-white" },
@@ -26,6 +26,9 @@ export function PlanCard({ plan }: { plan: PlanConfig }) {
           ${(plan.priceCents / 100).toFixed(2)}
           <span className="text-lg font-normal text-ink/60">/month</span>
         </p>
+        {plan.taxRate ? (
+          <p className="mt-1 text-sm text-ink/60">plus {taxRateLabel(plan.taxRate)} sales tax</p>
+        ) : null}
         <p className="mt-4 text-lg text-ink/80">{plan.description}</p>
 
         <FeatureList features={plan.features} accentClass={accent.icon} />

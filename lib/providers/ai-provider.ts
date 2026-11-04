@@ -12,7 +12,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { businessConfig } from "../config/business";
-import { plansConfig } from "../config/plans";
+import { plansConfig, taxRateLabel } from "../config/plans";
 
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 
@@ -37,7 +37,7 @@ function buildSystemPrompt(customerContext?: Record<string, unknown>): string {
     .filter((p) => p.group === "home_care")
     .map(
       (p) =>
-        `- ${p.name}: $${(p.priceCents / 100).toFixed(2)}/month. ${p.description} Features: ${p.features.join(
+        `- ${p.name}: $${(p.priceCents / 100).toFixed(2)}/month${p.taxRate ? ` plus ${taxRateLabel(p.taxRate)} sales tax` : ""}. ${p.description} Features: ${p.features.join(
           ", "
         )}.`
     )
@@ -45,7 +45,7 @@ function buildSystemPrompt(customerContext?: Record<string, unknown>): string {
 
   const seniorPlan = plansConfig.find((p) => p.group === "senior_safe");
   const seniorSummary = seniorPlan
-    ? `- ${seniorPlan.name}: $${(seniorPlan.priceCents / 100).toFixed(2)}/month. ${seniorPlan.description} Features: ${seniorPlan.features.join(", ")}.`
+    ? `- ${seniorPlan.name}: $${(seniorPlan.priceCents / 100).toFixed(2)}/month${seniorPlan.taxRate ? ` plus ${taxRateLabel(seniorPlan.taxRate)} sales tax` : ""}. ${seniorPlan.description} Features: ${seniorPlan.features.join(", ")}.`
     : "";
 
   return `
